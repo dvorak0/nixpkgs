@@ -1,41 +1,129 @@
-{ lib
-, fetchFromGitHub
-, naerskUnstable
-, makeWrapper
-, pkg-config
-, perl
-, openssl
+#with import <nixpkgs> {};
+{ stdenv
 , python3
-, runCommand
-, napalm
-, nodejs_latest
+, makeWrapper
+, xorg
+, lib
 , libsForQt5
 , xdg-utils
+, mkYarnPackage
 }:
+stdenv.mkDerivation rec {
+  pname = "activitywatch";
+  version = "0.11.0-alpha";
 
-let
-  version = "unstable-2021-06-21";
+  unpackPhase = "true";
 
-  sources = fetchFromGitHub {
-    owner = "ActivityWatch";
-    repo = "activitywatch";
-    rev = "9ac2e2fab448cd83edf76bed2fd371089250f338";
-    sha256 = "HWVy9FjxFFDoDmVJdslji5ckSlA76Ut+NUYFouQ9ckI=";
-    fetchSubmodules = true;
+  sources = fetchGit {
+    url = "https://github.com/ActivityWatch/activitywatch.git";
+    ref = "refs/tags/v0.11.0";
+    rev = "62fbdec9c22739fb7c997b6c626b92747e8fd90c";
+    submodules = true;
   };
 
-in
+  installPhase = ''
+    mkdir -p $out/bin
+    ln -s ${aw-qt}/bin/aw-qt $out/bin/aw-qt
 
-# I did not try to package the Python server due to issues with poetry2nix I encountered for aw-qt and since there is a Rust server available. The Rust server [requires unstable Rust](https://github.com/ActivityWatch/aw-server-rust/issues/116) preventing us to include it in nixpkgs.
+    # Include these as well, if users want to only use a subset of the services (e.g. everything but the system tray)
+    ln -s ${aw-server}/bin/aw-server $out/bin/aw-server
+    ln -s ${aw-watcher-window}/bin/aw-watcher-window $out/bin/aw-watcher-window
+    ln -s ${aw-watcher-afk}/bin/aw-watcher-afk $out/bin/aw-watcher-afk
+    ln -s ${aw-webui} $out/bin/aw-webui
+  '';
 
-rec {
-  aw-core = python3.pkgs.buildPythonPackage rec {
-    pname = "aw-core";
-    inherit version;
+  meta = with lib; {
+    description = "Records what you do so that you can know how you've spent your time. All in a secure way where you control the data.";
+    homepage = "https://github.com/ActivityWatch";
+  };
 
+  persist-queue = python3.pkgs.buildPythonPackage rec {
+    version = "0.6.0";
+    pname = "persist-queue";
     format = "pyproject";
 
+    meta = with lib; {
+      description = "Thread-safe disk based persistent queue in Python";
+      homepage = "https://github.com/peter-wangxu/persist-queue";
+      license = licenses.bsd3;
+    };
+
+    src = python3.pkgs.fetchPypi {
+      inherit pname version;
+      sha256 = "5z3WJUXTflGSR9ljaL+lxRD95mmZozjW0tRHkNwQ+Js=";
+    };
+
+    checkInputs = with python3.pkgs; [
+      msgpack
+      nose2
+    ];
+
+    checkPhase = ''
+      runHook preCheck
+      nose2
+      runHook postCheck
+    '';
+  };
+
+  TakeTheTime = python3.pkgs.buildPythonPackage rec {
+    pname = "TakeTheTime";
+    version = "0.3.1";
+    format = "pyproject";
+
+    src = python3.pkgs.fetchPypi {
+      inherit pname version;
+      sha256 = "2+MEU6G1lqOPni4/qOGtxa8tv2RsoIN61cIFmhb+L/k=";
+    };
+
+    checkInputs = [
+      python3.pkgs.nose
+    ];
+
+    doCheck = false; # tests not available on pypi
+
+    checkPhase = ''
+      runHook preCheck
+      nosetests -v tests/
+      runHook postCheck
+    '';
+
+    meta = with lib; {
+      description = "Simple time taking library using context managers";
+      homepage = "https://github.com/ErikBjare/TakeTheTime";
+      maintainers = with maintainers; [ skogsbrus jtojnar ];
+      license = licenses.mit;
+    };
+  };
+
+  timeslot = python3.pkgs.buildPythonPackage rec {
+    pname = "timeslot";
+    version = "0.1.2";
+
+    src = python3.pkgs.fetchPypi {
+      inherit pname version;
+      sha256 = "oqyZhlfj87nKkodXtJBq3SwFOQxfwU7XkruQKNCFR7E=";
+    };
+
+    meta = with lib; {
+      description = "Data type for representing time slots with a start and end";
+      homepage = "https://github.com/ErikBjare/timeslot";
+      maintainers = with maintainers; [ skogsbrus jtojnar ];
+      license = licenses.mit;
+    };
+  };
+
+  aw-core = python3.pkgs.buildPythonPackage rec {
+    format = "pyproject";
+    inherit version;
+    pname = "aw-core";
     src = "${sources}/aw-core";
+
+    meta = with lib; {
+      description = "Core library for ActivityWatch";
+      homepage = "https://github.com/ActivityWatch/aw-core";
+      maintainers = with maintainers; [ skogsbrus jtojnar ];
+      license = licenses.mpl20;
+    };
 
     nativeBuildInputs = [
       python3.pkgs.poetry
@@ -56,24 +144,32 @@ rec {
     ];
 
     postPatch = ''
-      sed -E 's#python-json-logger = "\^0.1.11"#python-json-logger = "^2.0"#g' -i pyproject.toml
-    '';
+      substituteInPlace pyproject.toml \
+        --replace 'iso8601 = "^0.1.12"' 'iso8601 = "*"'
 
-    meta = with lib; {
-      description = "Core library for ActivityWatch";
-      homepage = "https://github.com/ActivityWatch/aw-core";
-      maintainers = with maintainers; [ jtojnar ];
-      license = licenses.mpl20;
-    };
+      substituteInPlace pyproject.toml \
+        --replace 'python-json-logger = "^0.1.11"' 'python-json-logger = "*"'
+
+      substituteInPlace pyproject.toml \
+        --replace 'jsonschema = "^3.1"' 'jsonschema = "*"'
+
+      substituteInPlace pyproject.toml \
+        --replace 'tomlkit = "^0.6.0"' 'tomlkit = "*"'
+    '';
   };
 
   aw-client = python3.pkgs.buildPythonPackage rec {
-    pname = "aw-client";
-    inherit version;
-
     format = "pyproject";
-
+    inherit version;
+    pname = "aw-client";
     src = "${sources}/aw-client";
+
+    meta = with lib; {
+      description = "Client library for ActivityWatch";
+      homepage = "https://github.com/ActivityWatch/aw-client";
+      maintainers = with maintainers; [ skogsbrus jtojnar ];
+      license = licenses.mpl20;
+    };
 
     nativeBuildInputs = [
       python3.pkgs.poetry
@@ -87,91 +183,140 @@ rec {
     ];
 
     postPatch = ''
-      sed -E 's#click = "\^7.1.1"#click = "^8.0"#g' -i pyproject.toml
+      substituteInPlace pyproject.toml \
+        --replace 'click = "^7.1.1"' 'click = "^8.0"'
+    '';
+  };
+
+  aw-watcher-afk = python3.pkgs.buildPythonApplication rec {
+    format = "pyproject";
+    inherit version;
+    pname = "aw-watcher-afk";
+    src = "${sources}/aw-watcher-afk";
+
+    meta = with lib; {
+      description = "Watches keyboard and mouse activity to determine if you are AFK or not (for use with ActivityWatch)";
+      homepage = "https://github.com/ActivityWatch/aw-watcher-afk";
+      maintainers = with maintainers; [ skogsbrus jtojnar ];
+      license = licenses.mpl20;
+    };
+
+    nativeBuildInputs = [
+      python3.pkgs.poetry
+    ];
+
+    propagatedBuildInputs = with python3.pkgs; [
+      aw-client
+      xlib
+      pynput
+    ];
+
+    postPatch = ''
+      substituteInPlace pyproject.toml \
+        --replace 'python-xlib = { version = "^0.28"' 'python-xlib = { version = "*"'
+    '';
+  };
+
+  aw-watcher-window = python3.pkgs.buildPythonApplication rec {
+    format = "pyproject";
+    inherit version;
+    pname = "aw-watcher-window";
+    src = "${sources}/aw-watcher-window";
+
+    meta = with lib; {
+      description = "Cross-platform window watcher (for use with ActivityWatch)";
+      homepage = "https://github.com/ActivityWatch/aw-watcher-window";
+      maintainers = with maintainers; [ skogsbrus jtojnar ];
+      license = licenses.mpl20;
+    };
+
+    nativeBuildInputs = [
+      python3.pkgs.poetry
+    ];
+
+    propagatedBuildInputs = with python3.pkgs; [
+      aw-client
+      xlib
+    ];
+
+    postPatch = ''
+      substituteInPlace pyproject.toml \
+        --replace 'python-xlib = {version = "^0.28", platform = "linux"' 'python-xlib = {version = "*"'
+    '';
+  };
+
+  aw-server = python3.pkgs.buildPythonApplication rec {
+    pname = "aw-server";
+    inherit version;
+    format = "pyproject";
+    out = "./out";
+    src = "${sources}/aw-server";
+
+    nativeBuildInputs = [
+      python3.pkgs.poetry
+    ];
+
+    propagatedBuildInputs = with python3.pkgs; [
+      aw-core
+      aw-client
+      aw-webui
+      appdirs
+      flask
+      flask-restx
+      flask-cors
+      setuptools # for pkg_resources
+    ];
+
+    # TODO: pin flask versions
+    postPatch = ''
+      substituteInPlace pyproject.toml \
+        --replace 'flask = "^1.1.1"' 'flask = "*"'
+
+      substituteInPlace pyproject.toml \
+        --replace 'flask-restx = "^0.2.0"' 'flask-restx = "*"'
+
+      substituteInPlace pyproject.toml \
+        --replace 'flask-cors = "^3.0.8"' 'flask-cors = "*"'
+    '';
+
+    # TODO: Possible to use wildcard for python version, e.g. python*?
+    postInstall = ''
+      # Couldn't get this configured correctly with
+      # https://python-poetry.org/docs/pyproject/#include-and-exclude.
+      # Symlink manually instead
+      ln -s ${aw-webui} "$out/lib/python3.9/site-packages/aw_server/static"
     '';
 
     meta = with lib; {
-      description = "Client library for ActivityWatch";
-      homepage = "https://github.com/ActivityWatch/aw-client";
-      maintainers = with maintainers; [ jtojnar ];
+      description = "ActivityWatch server for storage of all your Quantified Self data.";
+      homepage = "https://github.com/ActivityWatch/aw-server";
+      maintainers = with maintainers; [ skogsbrus ];
       license = licenses.mpl20;
     };
   };
 
-  persist-queue = python3.pkgs.buildPythonPackage rec {
-    version = "0.6.0";
-    pname = "persist-queue";
+  aw-webui = mkYarnPackage rec {
+    name = "aw-webui";
+    src = "${sources}/aw-server/aw-webui";
+    packageJSON = "${src}/package.json";
+    yarnLock = ./yarn.lock;
 
-    src = python3.pkgs.fetchPypi {
-      inherit pname version;
-      sha256 = "5z3WJUXTflGSR9ljaL+lxRD95mmZozjW0tRHkNwQ+Js=";
-    };
-
-    checkInputs = with python3.pkgs; [
-      msgpack
-      nose2
-    ];
-
-    checkPhase = ''
-      runHook preCheck
-
-      nose2
-
-      runHook postCheck
+    buildPhase = ''
+      yarn build --offline
     '';
 
-    meta = with lib; {
-      description = "Thread-safe disk based persistent queue in Python";
-      homepage = "https://github.com/peter-wangxu/persist-queue";
-      license = licenses.bsd3;
-    };
-  };
-
-  TakeTheTime = python3.pkgs.buildPythonPackage rec {
-    pname = "TakeTheTime";
-    version = "0.3.1";
-
-    src = python3.pkgs.fetchPypi {
-      inherit pname version;
-      sha256 = "2+MEU6G1lqOPni4/qOGtxa8tv2RsoIN61cIFmhb+L/k=";
-    };
-
-    checkInputs = [
-      python3.pkgs.nose
-    ];
-
-    doCheck = false; # tests not available on pypi
-
-    checkPhase = ''
-      runHook preCheck
-
-      nosetests -v tests/
-
-      runHook postCheck
+    installPhase = ''
+      mkdir -p $out
+      mv deps/aw-webui/dist/* $out
     '';
 
-    meta = with lib; {
-      description = "Simple time taking library using context managers";
-      homepage = "https://github.com/ErikBjare/TakeTheTime";
-      maintainers = with maintainers; [ jtojnar ];
-      license = licenses.mit;
-    };
-  };
-
-  timeslot = python3.pkgs.buildPythonPackage rec {
-    pname = "timeslot";
-    version = "0.1.2";
-
-    src = python3.pkgs.fetchPypi {
-      inherit pname version;
-      sha256 = "oqyZhlfj87nKkodXtJBq3SwFOQxfwU7XkruQKNCFR7E=";
-    };
+    distPhase = "true";
 
     meta = with lib; {
-      description = "Data type for representing time slots with a start and end";
-      homepage = "https://github.com/ErikBjare/timeslot";
-      maintainers = with maintainers; [ jtojnar ];
-      license = licenses.mit;
+      description = "A web-based UI for ActivityWatch, built with Vue.js";
+      homepage = "https://github.com/ActivityWatch/aw-webui";
+      maintainers = with maintainers; [ skogsbrus meain ];
+      license = licenses.mpl20;
     };
   };
 
@@ -188,20 +333,31 @@ rec {
       python3.pkgs.pyqt5 # for pyrcc5
       libsForQt5.wrapQtAppsHook
       xdg-utils
+      makeWrapper
     ];
 
     propagatedBuildInputs = with python3.pkgs; [
       aw-core
       pyqt5
       click
+      xorg.xauth
     ];
 
-    # Prevent double wrapping
+    # Prevent error: `qt.qpa.plugin: Could not find the Qt platform plugin "xcb" in ""`
+    # https://discourse.nixos.org/t/how-can-i-build-a-python-package-that-uses-qt/7657/5
     dontWrapQtApps = true;
+    preFixup = ''
+      makeWrapperArgs+=(
+        "''${qtWrapperArgs[@]}"
+      )
+    '';
 
     postPatch = ''
-      sed -E 's#click = "\^7.1.2"#click = "^8.0"#g' -i pyproject.toml
-      sed -E 's#PyQt5 = "5.15.2"#PyQt5 = "^5.15.2"#g' -i pyproject.toml
+      substituteInPlace pyproject.toml \
+        --replace 'PyQt5 = "5.15.2"' 'PyQt5 = "^5.15.2"'
+
+      substituteInPlace pyproject.toml \
+        --replace 'click = "^7.1.2"' 'click = "^8.0"'
     '';
 
     preBuild = ''
@@ -212,155 +368,23 @@ rec {
       install -Dt $out/etc/xdg/autostart resources/aw-qt.desktop
       xdg-icon-resource install --novendor --size 32 media/logo/logo.png activitywatch
       xdg-icon-resource install --novendor --size 512 media/logo/logo.png activitywatch
-    '';
 
-    preFixup = ''
-      makeWrapperArgs+=(
-        "''${qtWrapperArgs[@]}"
-      )
+      # Bundle all binaries with aw-qt, so it can find & launch them
+      ln -s ${aw-watcher-window}/bin/aw-watcher-window "$out"/lib/python3*/site-packages/aw_qt/aw-watcher-window
+      ln -s ${aw-watcher-afk}/bin/aw-watcher-afk "$out"/lib/python3*/site-packages/aw_qt/aw-watcher-afk
+      ln -s ${aw-server}/bin/aw-server "$out"/lib/python3*/site-packages/aw_qt/aw-server
+
+      # https://bugs.launchpad.net/ubuntu/+source/python-xlib/+bug/1885304
+      wrapProgram $out/bin/aw-qt \
+        --run 'xauth add $DISPLAY $(xauth list $DISPLAY | cut -d: -f2- | tail -1)'
     '';
 
     meta = with lib; {
       description = "Tray icon that manages ActivityWatch processes, built with Qt";
       homepage = "https://github.com/ActivityWatch/aw-qt";
-      maintainers = with maintainers; [ jtojnar ];
+      maintainers = with maintainers; [ skogsbrus jtojnar ];
       license = licenses.mpl20;
     };
   };
 
-  aw-server-rust = naerskUnstable.buildPackage {
-    name = "aw-server-rust";
-    inherit version;
-
-    root = "${sources}/aw-server-rust";
-
-    nativeBuildInputs = [
-      pkg-config
-      perl
-    ];
-
-    buildInputs = [
-      openssl
-    ];
-
-    overrideMain = attrs: {
-      nativeBuildInputs = attrs.nativeBuildInputs or [] ++ [
-        makeWrapper
-      ];
-
-      postFixup = attrs.postFixup or "" + ''
-        wrapProgram "$out/bin/aw-server" \
-          --prefix XDG_DATA_DIRS : "$out/share"
-
-        mkdir -p "$out/share/aw-server"
-        ln -s "${aw-webui}" "$out/share/aw-server/static"
-      '';
-    };
-
-    meta = with lib; {
-      description = "Cross-platform, extensible, privacy-focused, free and open-source automated time tracker";
-      homepage = "https://github.com/ActivityWatch/aw-server-rust";
-      maintainers = with maintainers; [ jtojnar ];
-      platforms = platforms.linux;
-      license = licenses.mpl20;
-    };
-  };
-
-  aw-watcher-afk = python3.pkgs.buildPythonApplication rec {
-    pname = "aw-watcher-afk";
-    inherit version;
-
-    format = "pyproject";
-
-    src = "${sources}/aw-watcher-afk";
-
-    nativeBuildInputs = [
-      python3.pkgs.poetry
-    ];
-
-    propagatedBuildInputs = with python3.pkgs; [
-      aw-client
-      xlib
-      pynput
-    ];
-
-    postPatch = ''
-      sed -E 's#python-xlib = \{ version = "\^0.28"#python-xlib = \{ version = "^0.29"#g' -i pyproject.toml
-    '';
-
-    meta = with lib; {
-      description = "Watches keyboard and mouse activity to determine if you are AFK or not (for use with ActivityWatch)";
-      homepage = "https://github.com/ActivityWatch/aw-watcher-afk";
-      maintainers = with maintainers; [ jtojnar ];
-      license = licenses.mpl20;
-    };
-  };
-
-  aw-watcher-window = python3.pkgs.buildPythonApplication rec {
-    pname = "aw-watcher-window";
-    inherit version;
-
-    format = "pyproject";
-
-    src = "${sources}/aw-watcher-window";
-
-    nativeBuildInputs = [
-      python3.pkgs.poetry
-    ];
-
-    propagatedBuildInputs = with python3.pkgs; [
-      aw-client
-      xlib
-    ];
-
-    postPatch = ''
-      sed -E 's#python-xlib = \{version = "\^0.28"#python-xlib = \{ version = "^0.29"#g' -i pyproject.toml
-    '';
-
-    meta = with lib; {
-      description = "Cross-platform window watcher (for use with ActivityWatch)";
-      homepage = "https://github.com/ActivityWatch/aw-watcher-window";
-      maintainers = with maintainers; [ jtojnar ];
-      license = licenses.mpl20;
-    };
-  };
-
-  aw-webui =
-    let
-      # Node.js used by napalm.
-      nodejs = nodejs_latest;
-
-      stopNpmCallingHome = ''
-        # Do not try to find npm in napalm-registry –
-        # it is not there and checking will slow down the build.
-        npm config set update-notifier false
-        # Same for security auditing, it does not make sense in the sandbox.
-        npm config set audit false
-      '';
-    in
-      napalm.buildPackage "${sources}/aw-server-rust/aw-webui" {
-        nativeBuildInputs = [
-          # deasync uses node-gyp
-          python3
-        ];
-
-        npmCommands = [
-          # Let’s install again, this time running scripts.
-          "npm install --loglevel verbose --nodedir=${nodejs}/include/node"
-
-          # Build the front-end.
-          "npm run build"
-        ];
-
-        postConfigure = ''
-          # configurePhase sets $HOME
-          ${stopNpmCallingHome}
-        '';
-
-        installPhase = ''
-          runHook preInstall
-          mv dist $out
-          runHook postInstall
-        '';
-      };
 }
