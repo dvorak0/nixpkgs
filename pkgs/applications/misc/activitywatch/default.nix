@@ -18,7 +18,6 @@ stdenv.mkDerivation rec {
     url = "https://github.com/ActivityWatch/activitywatch.git";
     ref = "refs/tags/v0.11.0";
     rev = "62fbdec9c22739fb7c997b6c626b92747e8fd90c";
-    fetchSubmodules = true;
   };
 
   installPhase = ''
