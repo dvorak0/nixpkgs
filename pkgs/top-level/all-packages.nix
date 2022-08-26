@@ -33907,4 +33907,6 @@ with pkgs;
   };
 
   zthrottle = callPackage ../tools/misc/zthrottle { };
+
+  activitywatch = callPackage ../applications/misc/activitywatch {};
 }
