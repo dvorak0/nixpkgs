@@ -16,7 +16,7 @@ stdenv.mkDerivation rec {
 
   sources = fetchGit {
     url = "https://github.com/ActivityWatch/activitywatch.git";
-    rev = "a29bf7e2a12d2e26b1621f56d038485f1796b4ae";
+    rev = "b51462450a8901c0dbbe45f35b589847877e98b8";
     submodules = true;
   };
 
