@@ -35535,4 +35535,6 @@ with pkgs;
   honeyvent = callPackage ../servers/tracing/honeycomb/honeyvent { };
 
   mictray = callPackage ../tools/audio/mictray { };
+
+  activitywatch = callPackage ../misc/activitywatch { };
 }
