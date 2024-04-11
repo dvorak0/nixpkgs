@@ -4,12 +4,12 @@
 }:
 appimageTools.wrapType2 rec {
   pname = "immersed-vr";
-  version = "9.6";
+  version = "10.1.1";
   name = "${pname}-${version}";
 
   src = fetchurl {
-    url = "http://web.archive.org/web/20231011083250/https://static.immersed.com/dl/Immersed-x86_64.AppImage";
-    hash = "sha256-iA0SQlPktETFXEqCbSoWV9NaWVahkPa6qO4Cfju0aBQ=";
+    url = "https://web.archive.org/web/20240325135651/https://static.immersed.com/dl/Immersed-x86_64.AppImage";
+    hash = "sha256-NwO8nJqwLnr4wi+MSoXaJwsPi8zSlFQ8hNsIscdEcw8=";
   };
 
   extraInstallCommands = ''
