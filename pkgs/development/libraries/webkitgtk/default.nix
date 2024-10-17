@@ -1,6 +1,5 @@
 { lib
 , stdenv
-, buildPackages
 , runCommand
 , fetchurl
 , perl
@@ -21,12 +20,13 @@
 , wayland
 , wayland-protocols
 , libwebp
+, libwpe
+, libwpe-fdo
 , enchant2
 , xorg
 , libxkbcommon
 , libavif
 , libepoxy
-, libjxl
 , at-spi2-core
 , libxml2
 , libsoup
@@ -34,6 +34,7 @@
 , libxslt
 , harfbuzz
 , libpthreadstubs
+, pcre
 , nettle
 , libtasn1
 , p11-kit
@@ -47,14 +48,15 @@
 , libintl
 , lcms2
 , libmanette
+, openjpeg
 , geoclue2
 , sqlite
+, enableGLES ? true
 , gst-plugins-base
 , gst-plugins-bad
 , woff2
 , bubblewrap
 , libseccomp
-, libbacktrace
 , systemd
 , xdg-dbus-proxy
 , substituteAll
@@ -89,6 +91,13 @@ stdenv.mkDerivation (finalAttrs: {
       inherit (builtins) storeDir;
       inherit (addOpenGLRunpath) driverLink;
     })
+
+    # Hardcode path to WPE backend
+    # https://github.com/NixOS/nixpkgs/issues/110468
+    (substituteAll {
+      src = ./fdo-backend-path.patch;
+      wpebackend_fdo = libwpe-fdo;
+    })
   ];
 
   preConfigure = lib.optionalString (stdenv.hostPlatform != stdenv.buildPlatform) ''
@@ -114,6 +123,8 @@ stdenv.mkDerivation (finalAttrs: {
     gi-docgen
     glib # for gdbus-codegen
     unifdef
+  ] ++ lib.optionals stdenv.isLinux [
+    wayland # for wayland-scanner
   ];
 
   buildInputs = [
@@ -121,7 +132,6 @@ stdenv.mkDerivation (finalAttrs: {
     enchant2
     libavif
     libepoxy
-    libjxl
     gnutls
     gst-plugins-bad
     gst-plugins-base
@@ -140,12 +150,18 @@ stdenv.mkDerivation (finalAttrs: {
     libxkbcommon
     libxml2
     libxslt
-    libbacktrace
     nettle
+    openjpeg
     p11-kit
+    pcre
     sqlite
     woff2
-  ] ++ lib.optionals stdenv.isDarwin [
+  ] ++ (with xorg; [
+    libXdamage
+    libXdmcp
+    libXt
+    libXtst
+  ]) ++ lib.optionals stdenv.isDarwin [
     libedit
     readline
   ] ++ lib.optional (stdenv.isDarwin && !stdenv.isAarch64) (
@@ -160,7 +176,8 @@ stdenv.mkDerivation (finalAttrs: {
     libseccomp
     libmanette
     wayland
-    xorg.libX11
+    libwpe
+    libwpe-fdo
   ] ++ lib.optionals systemdSupport [
     systemd
   ] ++ lib.optionals enableGeoLocation [
@@ -168,6 +185,7 @@ stdenv.mkDerivation (finalAttrs: {
   ] ++ lib.optionals withLibsecret [
     libsecret
   ] ++ lib.optionals (lib.versionAtLeast gtk3.version "4.0") [
+    xorg.libXcomposite
     wayland-protocols
   ];
 
@@ -189,7 +207,6 @@ stdenv.mkDerivation (finalAttrs: {
     # https://github.com/WebKit/WebKit/commit/a84036c6d1d66d723f217a4c29eee76f2039a353
     "-DBWRAP_EXECUTABLE=${lib.getExe bubblewrap}"
     "-DDBUS_PROXY_EXECUTABLE=${lib.getExe xdg-dbus-proxy}"
-    "-DWAYLAND_SCANNER=${buildPackages.wayland-scanner}/bin/wayland-scanner"
   ] ++ lib.optionals stdenv.isDarwin [
     "-DENABLE_GAMEPAD=OFF"
     "-DENABLE_GTKDOC=OFF"
@@ -198,10 +215,12 @@ stdenv.mkDerivation (finalAttrs: {
     "-DENABLE_X11_TARGET=OFF"
     "-DUSE_APPLE_ICU=OFF"
     "-DUSE_OPENGL_OR_ES=OFF"
-  ] ++ lib.optionals (lib.versionOlder gtk3.version "4.0") [
-    "-DUSE_GTK4=OFF"
+  ] ++ lib.optionals (lib.versionAtLeast gtk3.version "4.0") [
+    "-DUSE_GTK4=ON"
   ] ++ lib.optionals (!systemdSupport) [
     "-DENABLE_JOURNALD_LOG=OFF"
+  ] ++ lib.optionals (stdenv.isLinux && enableGLES) [
+    "-DENABLE_GLES2=ON"
   ];
 
   postPatch = ''
@@ -219,7 +238,6 @@ stdenv.mkDerivation (finalAttrs: {
 
   meta = with lib; {
     description = "Web content rendering engine, GTK port";
-    mainProgram = "WebKitWebDriver";
     homepage = "https://webkitgtk.org/";
     license = licenses.bsd2;
     pkgConfigModules = [
