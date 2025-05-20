@@ -39,7 +39,7 @@ let
 
   src = fetchurl {
     url = "https://get.foxglove.dev/desktop/latest/foxglove-studio-latest-linux-amd64.deb";
-    hash = "sha256-5atLi9oXHoo0q1b/NHMC4bciFTQPWvD2xJkYEW8374w=";
+    hash = "sha256-4RG9Wb9ULInRDyZVvbr0Qa222nkUCkc70XWBdvtt64E=";
   };
 
 in
