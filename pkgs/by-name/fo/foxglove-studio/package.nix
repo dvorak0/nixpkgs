@@ -38,7 +38,7 @@ let
   version = "2.22.0";
 
   src = fetchurl {
-    url = "https://get.foxglove.dev/desktop/latest/foxglove-studio-2.22.0-linux-amd64.deb";
+    url = "https://get.foxglove.dev/desktop/latest/foxglove-studio-latest-linux-amd64.deb";
     hash = "sha256-5atLi9oXHoo0q1b/NHMC4bciFTQPWvD2xJkYEW8374w=";
   };
 
