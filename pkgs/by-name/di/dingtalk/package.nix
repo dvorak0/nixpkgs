@@ -40,6 +40,7 @@
   libgcrypt,
   libGLU,
   libglvnd,
+  pangox_compat,
   libidn2,
   libinput,
   libjpeg,
@@ -89,6 +90,7 @@ stdenv.mkDerivation (finalAttrs: {
     dpkg
     imagemagick
   ];
+
   # IMPORTANT: autoPatchelfHook searches buildInputs for required SONAMEs.
   # Put all the needed libs here so patching succeeds.
   buildInputs = [
@@ -124,9 +126,9 @@ stdenv.mkDerivation (finalAttrs: {
     rtmpdump       # provides librtmp.so.1
 
     # Low-level bits
-    e2fsprogs.out  # provides libcom_err.so.2 (not in e2fsprogs default output)
-    libxcrypt-legacy  # provides libcrypt.so.1
-    libgcrypt         # provides libgcrypt.so.20
+    e2fsprogs.out      # provides libcom_err.so.2 (not in e2fsprogs default output)
+    libxcrypt-legacy   # provides libcrypt.so.1
+    libgcrypt          # provides libgcrypt.so.20
 
     # GL / X11 stack including gtkglext deps
     mesa
@@ -141,7 +143,7 @@ stdenv.mkDerivation (finalAttrs: {
     xorg.xcbutilimage xorg.xcbutilkeysyms xorg.xcbutilrenderutil xorg.xcbutilwm
 
     # PangoX compatibility for old gtkglext consumers
-    pangox-compat     # provides libpangox-1.0.so.0
+    pangox_compat     # provides libpangox-1.0.so.0
 
     # Misc used in wrapper
     icu63
@@ -155,8 +157,7 @@ stdenv.mkDerivation (finalAttrs: {
     pcre2
     dbus
     libdrm
-  ]
-  ++ lib.optionals stdenv.hostPlatform.isAarch64 [
+  ] ++ lib.optionals stdenv.hostPlatform.isAarch64 [
     gst_all_1.gstreamer
     gst_all_1.gst-plugins-base
     gst_all_1.gst-plugins-good
@@ -165,6 +166,12 @@ stdenv.mkDerivation (finalAttrs: {
   ];
 
   dontWrapQtApps = true;
+
+  unpackPhase = ''
+    runHook preUnpack
+    dpkg -x $src .
+    runHook postUnpack
+  '';
 
   installPhase = ''
     runHook preInstall
@@ -209,7 +216,7 @@ stdenv.mkDerivation (finalAttrs: {
           cups
           curl
           dbus
-          e2fsprogs
+          e2fsprogs.out
           fontconfig
           freetype
           fribidi
@@ -232,6 +239,7 @@ stdenv.mkDerivation (finalAttrs: {
           libpulseaudio
           libssh2
           gnome2.gtkglext
+          pangox_compat
           libthai
           libxcrypt-legacy
           libxkbcommon
@@ -274,12 +282,10 @@ stdenv.mkDerivation (finalAttrs: {
     description = "Alibaba Enterprise Communication Collaboration Platform";
     homepage = "https://www.dingtalk.com";
     license = lib.licenses.unfree;
-    platforms = [
-      "x86_64-linux"
-      "aarch64-linux"
-    ];
+    platforms = [ "x86_64-linux" "aarch64-linux" ];
     sourceProvenance = with lib.sourceTypes; [ binaryNativeCode ];
     maintainers = with lib.maintainers; [ nyxvectar ];
     mainProgram = "dingtalk";
   };
 })
+
