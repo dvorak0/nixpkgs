@@ -89,19 +89,72 @@ stdenv.mkDerivation (finalAttrs: {
     dpkg
     imagemagick
   ];
-
+  # IMPORTANT: autoPatchelfHook searches buildInputs for required SONAMEs.
+  # Put all the needed libs here so patching succeeds.
   buildInputs = [
-    xorg.libXdamage
-    xorg.libXrandr
+    # Audio / desktop basics
     alsa-lib
     libpulseaudio
     nss
     nspr
-    at-spi2-atk
     cups
     at-spi2-core
+    at-spi2-atk
     gtk3
     gtk2-x11
+    gdk-pixbuf
+    cairo
+    pango
+    fribidi
+    graphite2
+    harfbuzz
+    fontconfig
+    freetype
+    glib
+
+    # Curl & TLS deps (DingTalk bundle expects these backends present)
+    curl
+    gnutls
+    krb5
+    libidn2
+    libpsl
+    libssh2
+    nghttp2
+    openldap       # provides libldap_r-2.4.so.2 and liblber-2.4.so.2
+    rtmpdump       # provides librtmp.so.1
+
+    # Low-level bits
+    e2fsprogs.out  # provides libcom_err.so.2 (not in e2fsprogs default output)
+    libxcrypt-legacy  # provides libcrypt.so.1
+    libgcrypt         # provides libgcrypt.so.20
+
+    # GL / X11 stack including gtkglext deps
+    mesa
+    libglvnd
+    libGLU            # provides libGLU.so.1
+    xorg.libXmu       # provides libXmu.so.6
+    gnome2.gtkglext
+    xorg.libICE xorg.libSM xorg.libX11 xorg.libxcb
+    xorg.libXcomposite xorg.libXcursor xorg.libXdamage xorg.libXext
+    xorg.libXfixes xorg.libXi xorg.libXinerama xorg.libXrandr xorg.libXrender
+    xorg.libXScrnSaver xorg.libXt xorg.libXtst
+    xorg.xcbutilimage xorg.xcbutilkeysyms xorg.xcbutilrenderutil xorg.xcbutilwm
+
+    # PangoX compatibility for old gtkglext consumers
+    pangox-compat     # provides libpangox-1.0.so.0
+
+    # Misc used in wrapper
+    icu63
+    libjpeg
+    libpng
+    libthai
+    libinput
+    mtdev
+    util-linux
+    udev
+    pcre2
+    dbus
+    libdrm
   ]
   ++ lib.optionals stdenv.hostPlatform.isAarch64 [
     gst_all_1.gstreamer
